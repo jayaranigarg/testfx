@@ -1,19 +1,49 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+# Pipeline YAML for PR
 
-trigger:
-- master
+jobs:
+- job: Windows
+  pool:
+    vmImage: 'vs2017-win2016'
+  variables:
+    buildConfiguration: 'Release'
+  steps:
+  - task: BatchScript@1
+    displayName: 'Run script build.cmd'
+    inputs:
+      filename: build.cmd
+      arguments: '-verbose -configuration $(buildConfiguration) -full -clean'
+      modifyEnvironment: false
+      failOnStandardError: true
 
-pool:
-  vmImage: 'Ubuntu-16.04'
+  - task: CmdLine@1
+    displayName: 'Delete stale pdb files'
+    inputs:
+      filename: del
+      arguments: '/S /F *.pdb'
+      workingFolder: '$(SystemRoot)'
+    continueOnError: true
+    condition: always()
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+  - task: BatchScript@1
+    displayName: 'Run Unit Tests'
+    inputs:
+      filename: test.cmd
+      arguments: '-verbose -configuration $(buildConfiguration) -parallel'
+      modifyEnvironment: false
+      failOnStandardError: true
+            
+  - task: BatchScript@1
+    displayName: 'Run Smoke Tests'
+    inputs:
+      filename: test.cmd
+      arguments: '-verbose -configuration $(buildConfiguration) -p smoke'
+      modifyEnvironment: false
+      failOnStandardError: true
+      
+  - task: PublishTestResults@2
+    displayName: 'Publish Test Results **\*.trx'
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: '**\*.trx'
+    condition: succeededOrFailed()
+   
